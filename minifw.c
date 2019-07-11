@@ -1,3 +1,8 @@
+//Help:
+//https://medium.com/@GoldenOak/linux-kernel-communication-part-1-netfilter-hooks-15c07a5a5c4e
+
+//#include "string.h"
+//#include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/netfilter.h>
@@ -5,10 +10,16 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 
-static struct nf_hook_ops telnetFilterHook;
+static struct nf_hook_ops telnet_in_hook;
+static struct nf_hook_ops telnet_out_hook;
 
+unsigned int telnet_out(void *priv, struct sk_buff *skb,
+						const struct nf_hook_state *state)
+{
+	return NF_ACCEPT;
+}
 
-unsigned int telnetFilter(void *priv, struct sk_buff *skb,
+unsigned int telnet_in(void *priv, struct sk_buff *skb,
 						const struct nf_hook_state *state)
 {
 	struct iphdr *iph;
@@ -23,6 +34,8 @@ unsigned int telnetFilter(void *priv, struct sk_buff *skb,
 	port = tcph->dest;
 	//printk(KERN_INFO "Destination port: %d\n", port);
 
+	//char *IPbuffer = inet_ntoa(*((struct in_addr*)  host_entry->h_addr_list[0]);
+
 	//objectives:
 	//block telnet protocol between two machines
 	//block the access to a certain website
@@ -33,64 +46,92 @@ unsigned int telnetFilter(void *priv, struct sk_buff *skb,
 		((unsigned char *)&iph->daddr)[1],
 		((unsigned char *)&iph->daddr)[2],
 		((unsigned char *)&iph->daddr)[3]);
+
+		//extractIpAddress(iph->daddr, ip_add);
 		return NF_DROP;
 	} 
-	
-	//struct iphdr *ip_header = (struct iphdr *)skb_network_header(skb);
-	//src_ip = (unsigned int)iph->saddr;
-	//dest_ip = (unsigned int)iph->daddr;
-	//printk(KERN_INFO "Received packet from source address: %pI4\n",src_ip);	
-	printk(KERN_INFO "Accepted packet to %d.%d.%d.%d\n",
+	if (iph->daddr == (__be32)3232235781) {
+		printk(KERN_INFO "Rejected connection to %d.%d.%d.%d\n",
 		((unsigned char *)&iph->daddr)[0],
 		((unsigned char *)&iph->daddr)[1],
 		((unsigned char *)&iph->daddr)[2],
 		((unsigned char *)&iph->daddr)[3]);
+	}
+	
+	if (iph->daddr == (__be32)83994816) {
+		printk(KERN_INFO "Rejected connection ip inverted to %d.%d.%d.%d\n",
+		((unsigned char *)&iph->daddr)[0],
+		((unsigned char *)&iph->daddr)[1],
+		((unsigned char *)&iph->daddr)[2],
+		((unsigned char *)&iph->daddr)[3]);
+	}
+
+	//struct iphdr *ip_header = (struct iphdr *)skb_network_header(skb);
+	//src_ip = (unsigned int)iph->saddr;
+	//dest_ip = (unsigned int)iph->daddr;
+	//printk(KERN_INFO "Received packet from source address: %d\n",iph->daddr);	
+	printk(KERN_INFO "Accepted packet to %d.%d.%d.%d\n",
+		((unsigned char *)&iph->saddr)[0],
+		((unsigned char *)&iph->saddr)[1],
+		((unsigned char *)&iph->saddr)[2],
+		((unsigned char *)&iph->saddr)[3]);
 
 	return NF_ACCEPT;
 }
 
+int setup_out_rules(void){
 
-int setUpFilter(void) {
-	printk(KERN_INFO "starting a Telnet filter init.\n");
+	telnet_in_hook.hook = telnet_out; 
+	telnet_in_hook.hooknum =  NF_INET_POST_ROUTING;
+	telnet_in_hook.pf = PF_INET;
+	telnet_in_hook.priority = NF_IP_PRI_FIRST;
 
-	telnetFilterHook.hook = telnetFilter; 
-	telnetFilterHook.hooknum =  NF_INET_PRE_ROUTING;
-	telnetFilterHook.pf = PF_INET;
-	telnetFilterHook.priority = NF_IP_PRI_FIRST;
-
-	printk(KERN_INFO "Registering a Telnet filter.\n");
-
-	printk(KERN_INFO "Telnet init st ptr: %p.\n", &telnetFilterHook );
-	printk(KERN_INFO "Telnet init hook addr:%p.\n", telnetFilterHook.hook);
-
+	printk(KERN_INFO "Telnet out rules ptr: %p.\n", &telnet_out_hook );
 	// Register the hook.
-	nf_register_net_hook(&init_net, &telnetFilterHook );
+	nf_register_net_hook(&init_net, &telnet_out_hook );
 	return 0;
 }
 
+
+int setup_in_rules(void) {
+
+	telnet_in_hook.hook = telnet_in; 
+	telnet_in_hook.hooknum =  NF_INET_PRE_ROUTING;
+	telnet_in_hook.pf = PF_INET;
+	telnet_in_hook.priority = NF_IP_PRI_FIRST;
+
+	printk(KERN_INFO "Telnet in rules ptr: %p.\n", &telnet_in_hook );
+	// Register the hook.
+	nf_register_net_hook(&init_net, &telnet_in_hook );
+	return 0;
+}
+
+
 void removeFilter(void) {
-	printk(KERN_INFO "Telnet remove hook addr:%p.\n", &telnetFilterHook);
-	nf_unregister_net_hook( &init_net, &telnetFilterHook );
+	printk(KERN_INFO "Telnet remove hook addr:%p.\n", &telnet_in_hook);
+	
+	if (&telnet_in_hook.hook != NULL) {
+		nf_unregister_net_hook( &init_net, &telnet_in_hook );
+	}
+	if (&telnet_out_hook.hook != NULL) {
+		nf_unregister_net_hook( &init_net, &telnet_out_hook );
+	}
+ 	
+
 	printk(KERN_INFO "Telnet filter pos removal.\n");
 }
 
 
-module_init(setUpFilter);
+//module_init(setUpFilter);
 module_exit(removeFilter);
 MODULE_LICENSE("GPL");
 
 
-// not used anymore
-/* 
 int init_module(void)
 {
-	printk(KERN_INFO "Hello world f63ec4fbba82 !\n"); 
+	printk(KERN_INFO "starting a Telnet filter init.\n");
+	setup_in_rules();
+	//setup_out_rules();
+
 	return 0;
 }
-
-void cleanup_module(void)
-{
-	printk(KERN_INFO "Goodbye world f63ec4fbba82 !\n");
-}
- */
-
