@@ -5,15 +5,7 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 
-
-struct minifw_s{
-	void *this;
-	struct nf_hook_ops *telnetFilterHook;
-};
-
-
-//static struct nf_hook_ops telnetFilterHook;
-static struct minifw_s this;
+static struct nf_hook_ops telnetFilterHook;
 
 
 unsigned int telnetFilter(void *priv, struct sk_buff *skb,
@@ -32,6 +24,9 @@ unsigned int telnetFilter(void *priv, struct sk_buff *skb,
 	port = tcph->dest;
 	printk(KERN_INFO "packet port%d\n", port);
 
+	//objectives:
+	//block telnet protocol between two machines
+	//block the access to a certain website
 
 	if (iph->protocol == IPPROTO_TCP && port == htons(23)) {
 		printk(KERN_INFO "Dropping telnet packet to %d.%d.%d.%d\n",
@@ -56,37 +51,31 @@ unsigned int telnetFilter(void *priv, struct sk_buff *skb,
 
 
 int setUpFilter(void) {
-	//struct minifw_s this;
-	struct nf_hook_ops local_telnetFilter;
-
+	
+	
 	printk(KERN_INFO "starting a Telnet filter init.\n");
 
-	local_telnetFilter.hook = telnetFilter; 
-	local_telnetFilter.hooknum =  NF_INET_LOCAL_IN;
-	local_telnetFilter.pf = PF_INET;
-	local_telnetFilter.priority = NF_IP_PRI_FIRST;
+	telnetFilterHook.hook = telnetFilter; 
+	telnetFilterHook.hooknum =  NF_INET_PRE_ROUTING;
+	telnetFilterHook.pf = PF_INET;
+	telnetFilterHook.priority = NF_IP_PRI_FIRST;
 
 	printk(KERN_INFO "Registering a Telnet filter.\n");
 
-	this.telnetFilterHook = &local_telnetFilter;
+	printk(KERN_INFO "Telnet init st ptr: %p.\n", &telnetFilterHook );
+	printk(KERN_INFO "Telnet init hook addr:%p.\n", telnetFilterHook.hook);
 
-	printk(KERN_INFO "Telnet init this add: %p.\n",(void*) &this );
-	printk(KERN_INFO "Telnet init hook addr:%p.\n", this.telnetFilterHook);
+
 
 	// Register the hook.
-	nf_register_net_hook((void*)&this, this.telnetFilterHook );
+	nf_register_net_hook(&init_net, &telnetFilterHook );
 	return 0;
 }
 
 void removeFilter(void) {
-	printk(KERN_INFO "Telnet filter is being removed.\n");
-	printk(KERN_INFO "Telnet remove this add: %p.\n",(void*) &this );
-	printk(KERN_INFO "Telnet remove hook addr:%p.\n", this.telnetFilterHook);
-
-	nf_unregister_net_hook((void*) &this, this.telnetFilterHook );
-
+	printk(KERN_INFO "Telnet remove hook addr:%p.\n", &telnetFilterHook);
+	nf_unregister_net_hook( &init_net, &telnetFilterHook );
 	printk(KERN_INFO "Telnet filter pos removal.\n");
-
 }
 
 
