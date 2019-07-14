@@ -22,6 +22,7 @@ unsigned int telnet_out(void *priv, struct sk_buff *skb,
 	iph = ip_hdr(skb);
 	tcph = (void *)iph+iph->ihl*4;
 	
+	//ip address of the destination in as integer.
 	if (iph->daddr == (__be32)83994816) {//192.168.1.5
 		printk(KERN_INFO "Rejected connection to IP (inverted):%d.%d.%d.%d\n",
 		((unsigned char *)&iph->daddr)[0],
@@ -45,6 +46,7 @@ unsigned int telnet_in(void *priv, struct sk_buff *skb,
 	tcph = (void *)iph+iph->ihl*4;
 	port = tcph->dest;
 	
+	//TCP packet and port 23
 	if (iph->protocol == IPPROTO_TCP && port == htons(23)) {
 		printk(KERN_INFO "Dropping packet on port 23(telnet) from: %d.%d.%d.%d\n",
 		((unsigned char *)&iph->saddr)[0],
@@ -66,9 +68,13 @@ unsigned int telnet_in(void *priv, struct sk_buff *skb,
 
 int setup_out_rules(void){
 
+	//function call that is called when a packet matching this conditions passthrough netfilter.
 	telnet_out_hook.hook = telnet_out; 
+	//set the condition os post route. handles the packets that exiting the machine
 	telnet_out_hook.hooknum =  NF_INET_POST_ROUTING;
+	//IP protocol
 	telnet_out_hook.pf = PF_INET;
+	//higher priority
 	telnet_out_hook.priority = NF_IP_PRI_FIRST;
 
 	// Register the hook.
@@ -82,6 +88,7 @@ int setup_out_rules(void){
 int setup_in_rules(void) {
 
 	telnet_in_hook.hook = telnet_in; 
+	//set the condition os pre route. handles the packets that are entiring the machine
 	telnet_in_hook.hooknum =  NF_INET_PRE_ROUTING;
 	telnet_in_hook.pf = PF_INET;
 	telnet_in_hook.priority = NF_IP_PRI_FIRST;
@@ -116,7 +123,7 @@ MODULE_LICENSE("GPL");
 
 int init_module(void)
 {
-	printk(KERN_INFO "starting a Telnet filter init.\n");
+	printk(KERN_INFO "starting a custom filter.\n");
 	setup_in_rules();
 	setup_out_rules();
 
